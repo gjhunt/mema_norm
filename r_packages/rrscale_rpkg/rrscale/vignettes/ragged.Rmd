@@ -1,0 +1,61 @@
+---
+title: "Ragged RR"
+author: "Greg Hunt"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Ragged RR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteDepends{ggplot2,reshape2}
+---
+
+## RR overview
+
+The Robust re-scaling transformation (RR) is a transformation the help reveal latent structure in data. It uses three steps to transform the data:
+
+1. Gaussianize the data with a consensus box-cox-like transformation
+2. z-score Transform the data using robust estimates of the mean and s.d.
+3. remove extreme outliers from the data setting them to 'NA'
+
+The sequence of these transformations helps focus classic statistical analyses on consequential variance in the data rather than having the analyses be dominated by variation resulting from measurement scale or outliers.
+
+If you have not already read the basic vignette "Rescaling Data" that is recommend first. 
+
+Typically, the input to RR is a matrix or data.frame, the output is a matrix or data.frame of the same size, but with re-scaled values.  However, in this vignette we will explore how RR scale may also be used for ragged matrices, data frames, or lists. 
+
+## RR For Ragged Data
+
+First let's create some ragged data. We will generate data that cannot be put into a matrix since each of the observations is of different length:
+```{r}
+set.seed(12345)
+N = rpois(10,20)
+data = lapply(N,rexp)
+str(data)
+```
+
+We can still pass this to RR and have it transformed
+```{r}
+library('rrscale')
+rr.out = rrscale(data)
+```
+
+notice that the output of rrscale takes the same form as the input data. In this case it is a list of 10 sets of numbers:
+```{r}
+str(rr.out$RR)
+```
+We can compare the untransformed and the transformed data:
+```{r, out.width='100%', fig.asp=.5, dpi=300}
+library('ggplot2')
+library('reshape2')
+par(mfrow=c(2,1))
+df = data.frame(untrans=unlist(data),rr=unlist(rr.out$RR))
+df = melt(df,measure.vars = 1:2)
+ggplot(data=df,mapping=aes(x=value,fill=variable))+geom_histogram()+facet_wrap(~variable)
+```
+
+We can also still use the transformation function to transform data as previously. For example, if we only want to apply the "G"-step, we can call:
+```{r}
+g_only = rr.out$rr(data,G=TRUE,Z=FALSE,O=FALSE)
+str(g_only)
+```

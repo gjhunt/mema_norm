@@ -1,0 +1,103 @@
+---
+title: "Rescaling Data"
+author: "Greg Hunt"
+date: "`r Sys.Date()`"
+output:
+    html_document: default
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteDepends{ggplot2,reshape2}
+---
+
+In this vignette we'll look at how to use rrscale to re-scale data and help discover latent effects. 
+
+First we are going to generate data that is the concatenation of two log-normal groups. We do this by taking the outer product between two i.i.d. log-normal vectors, creating group 1 as:
+```{r}
+set.seed(919)
+u1 = rlnorm(100)
+v1 = rlnorm(100)
+Y1 = u1%*%t(v1)
+```
+and similarly group 2 as 
+```{r}
+u2 = rlnorm(100)
+v2 = rlnorm(100)
+Y2 = .5+u2%*%t(v2)
+```
+and then we concatenate these together to make a full data matrix (adding some noise)
+```{r}
+Y_nn = rbind(Y1,Y2)
+Y = Y_nn + array(rlnorm(prod(dim(Y_nn)),0,.05),dim(Y_nn))
+```
+Notice that its difficult to tell the groups apart:
+
+```{r, out.width='100%', fig.asp=.5, dpi=300}
+library('reshape2')
+library('ggplot2')
+group = factor(rep(c(1,2),each=100))
+levels(group) = c("group1","group2")
+mY = melt(data.frame(Y,group),id.vars="group")
+ggplot(data=mY,mapping=aes(x=value,color=group))+geom_histogram(bins=100)+geom_vline(data=aggregate(value~group,data=mY,mean),mapping=aes(xintercept=value,linetype=group),size=1.5)
+```
+
+
+Indeed if we look a t-test between the row means across groups we see no difference
+```{r}
+t.test(rowMeans(Y)[group=="group1"],rowMeans(Y)[group=="group2"])
+```
+
+Let's try this after transforming the data with rrscale:
+```{r}
+library('rrscale')
+scl = rrscale(Y,run_parallel=FALSE)
+```
+after running this we get an estimated transformation to help recover the latent group effect. The element "T_name" tells us that the best transformation is a box-cox-like transformation
+```{r}
+scl$T_name
+```
+and the element "par_hat" tells us the optimal value for the parameter to this transformation:
+```{r}
+scl$par_hat
+```
+we can grab the pre-computed RR transformation from the call to rrscale
+```{r}
+trans_Y = scl$RR
+```
+or we can use the returned "rr_fn" to calcluate this transformation, they are identical
+```{r}
+trans_Y2 = scl$rr_fn(Y)
+all(trans_Y2==trans_Y,na.rm=TRUE)
+```
+Notice that if we plot the transformed Y we see that the group difference is easier to see:
+```{r, out.width='100%', fig.asp=.5, dpi=300}
+tmY = melt(data.frame(trans_Y,group),id.vars="group")
+ggplot(data=tmY,mapping=aes(x=value,color=group))+geom_histogram(bins=100)+geom_vline(data=aggregate(value~group,data=tmY,mean),mapping=aes(xintercept=value,linetype=group),size=1.5)
+```
+indeed the t-test is now significant
+```{r}
+t.test(rowMeans(trans_Y)[group=="group1"],rowMeans(trans_Y)[group=="group2"])
+```
+If we plot he first two PCs for the transformed and un-transformed data we can see the group difference much better after transformation:
+
+
+```{r, out.width='100%', dpi=300}
+plot(svdc(Y)$u[,1:2],col=group)
+```
+
+
+```{r, out.width='100%', dpi=300}
+plot(svdc(trans_Y)$u[,1:2],col=group)
+```
+
+Here we are using the "svdc" function from the rrscale package which calculates 'completed" right and left singular vectors in the presence of missing values. We can also look at the canonical correlation between the group and the first two PCS for the transformed and untransformed data:
+```{r}
+cancor(model.matrix(~1+group),svdc(Y)$u[,1:2])
+```
+
+```{r}
+cancor(model.matrix(~1+group),svdc(trans_Y)$u[,1:2])
+```
+
+and we can see that it is much higher for the transformed data signifiying these principal components capture the latent group structure better.

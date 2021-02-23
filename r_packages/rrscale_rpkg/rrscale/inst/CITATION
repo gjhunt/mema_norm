@@ -1,0 +1,19 @@
+citHeader("To cite rrscale in publications use:")
+
+citEntry(entry = "Article",
+  title        = "Automatic Transformation and Integration to Improve Visualization and Discovery of Latent Effects in Imaging Data",
+  author       = personList(as.person("Gregory J. Hunt"),
+                            as.person("Mark A. Dane"),
+                            as.person("James E. Korkola"),
+                            as.person("Laura M. Heiser"),
+                            as.person("Johann A. Gagnon-Bartsch")),
+  journal      = "Journal of Computational and Graphical Statistics",
+  year         = "2020",
+  volume       = "0",
+  number       = "0",
+  pages        = "1--13",
+  url          = "https://doi.org/10.1080/10618600.2020.1741379",
+
+  textVersion  =
+  paste("Gregory J. Hunt, Mark A. Dane, James E. Korkola, Laura M. Heiser & Johann A. Gagnon-Bartsch (2020) Automatic Transformation and Integration to Improve Visualization and Discovery of Latent Effects in Imaging Data, Journal of Computational and Graphical Statistics, DOI: 10.1080/10618600.2020.1741379")
+)
