@@ -34,7 +34,6 @@ COPY analysis/analysis_plots.R analysis/analysis_plots.R
 COPY analysis/analysis_plots.Rmd analysis/analysis_plots.Rmd
 COPY analysis/analysis_plots.ipynb analysis/analysis_plots.ipynb
 
-COPY analysis/plot_scripts/density_plots.R analysis/plot_scripts/density_plots.R
 COPY analysis/plot_scripts/make_fmat.R analysis/plot_scripts/make_fmat.R
 COPY analysis/plot_scripts/plot_fns.R analysis/plot_scripts/plot_fns.R
 
