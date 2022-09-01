@@ -25,29 +25,32 @@ well_scatter_byw=function(feats,fnames,pw,facet){
 # a useful function for plotting wells individually
 well_plot=function(feats,fnames,pw,facet,scale_name="value",nr=2){
   stopifnot(length(feats)==length(fnames))
-  dta = d[PlateWell%in%pw,]
+  dta = d_c[PlateWell%in%pw,]
   sdta = dta[,c(feats,'PrintRow','PrintColumn','PlateWell'),with=FALSE]
   colnames(sdta) = c(fnames,'PrintRow','PrintColumn','Well')
   mdta=melt(sdta,id.vars=c('PrintRow','PrintColumn','Well'))
   colnames(mdta) = c('PrintRow','PrintColumn','Well','Feature','value')
   p=ggplot(data=mdta,mapping=aes_string(x="PrintColumn",y="PrintRow",fill="value"))
-  p = p+geom_tile()+scale_fill_gradient2(name=scale_name)
+  p = p+theme_classic()
+  p = p+geom_tile()+scale_fill_gradient2(name=scale_name,na.value='white')
   p = p +coord_fixed()+scale_y_reverse()
-  p=p+theme(legend.position="bottom")+theme_classic()
+  p=p+theme(legend.position="bottom")
   p=p+facet_wrap(as.formula(facet),nrow=nr)
   p=p+theme(axis.title.x=element_blank(),
             axis.text.x=element_blank(),
             axis.ticks.x=element_blank())
   p=p+theme(axis.title.y=element_blank(),
             axis.text.y=element_blank(),
-            axis.ticks.y=element_blank())
+            axis.ticks.y=element_blank())+
+    theme(panel.background=element_rect(fill="white", colour="white"))
+        
   return(p)
 }
 
 ## asvd scatter plots
 library('memanorm')
 
-vdf = function(asvd,scale=TRUE){
+vdf = function(asvd,fmats,scale=TRUE){
   if(scale)
       V = data.table(t(t(asvd$v)*asvd$dv))
   else
@@ -66,8 +69,8 @@ gg_color_hue <- function(n) {
 }
 
 # asvd pairwise scatter plots
-asvd_scatter = function(asvd,k=3,hl=NULL,ttl=NULL,legnd=TRUE){
-  vdf.out = vdf(asvd)
+asvd_scatter = function(asvd,fmats,k=3,hl=NULL,ttl=NULL,legnd=TRUE){
+  vdf.out = vdf(asvd,fmats)
   V = vdf.out$v
   pcts = vdf.out$dv^2
   pcts = pcts/sum(pcts)*100
@@ -90,8 +93,8 @@ asvd_scatter = function(asvd,k=3,hl=NULL,ttl=NULL,legnd=TRUE){
   return(pl)
 }
 
-asvd_scatter_layout = function(asvd,k=3,hl=NULL,ttl=NULL,legnd=TRUE){
-  vdf.out = vdf(asvd)
+asvd_scatter_layout = function(asvd,fmats,k=3,hl=NULL,ttl=NULL,legnd=TRUE){
+  vdf.out = vdf(asvd,fmats)
   V = vdf.out$v
   pcts = vdf.out$dv^2
   pcts = pcts/sum(pcts)*100
@@ -107,18 +110,19 @@ asvd_scatter_layout = function(asvd,k=3,hl=NULL,ttl=NULL,legnd=TRUE){
   return(pl)
 }
 
-asvd_compare=function(asvd,asvd_adj,rw_leg = .15, hl=NULL,fn = asvd_scatter){
-  unadj = lapply(fn(asvd,hl=hl,k=3,ttl="Unadjusted"),function(x)x+guides(shape=FALSE,color=FALSE))
-  adj = lapply(fn(asvd_adj,hl=hl,k=3,ttl="   Adjusted"),function(x)x+guides(shape=FALSE,color=FALSE))
-  leg = as.ggplot(get_legend(fn(asvd,hl=hl,k=2,ttl="Unadjusted")[[1]]))
+asvd_compare=function(asvd,asvd_adj,fmats,rw_leg = .15, hl=NULL,fn = asvd_scatter){
+  unadj = lapply(fn(asvd,fmats,hl=hl,k=2,ttl="Unadjusted"),function(x)x+guides(shape=FALSE,color=FALSE))
+  adj = lapply(fn(asvd_adj,fmats,hl=hl,k=2,ttl="   Adjusted"),function(x)x+guides(shape=FALSE,color=FALSE))
+  leg = as.ggplot(get_legend(fn(asvd,fmats,hl=hl,k=2,ttl="Unadjusted")[[1]]))
   plot_grid(plotlist=list(plot_grid(plotlist=c(unadj,adj),nrow=2),leg),nrow=1,rel_widths=c(1,rw_leg))
                #,labels=c('(i)','(ii)'),nrow=1,rel_widths=c(1,1,.35),hjust=-1.5)
 }
 ## asvd layout
-asvd_layout = function(asvd,k=5,ttl=NULL,nrow=NULL,scale=TRUE){
-  V = vdf(asvd,scale=scale)$v
+asvd_layout = function(asvd,fmats,k=5,ttl=NULL,nrow=NULL,scale=TRUE){
+  V = vdf(asvd,fmats,scale=scale)$v
+  colnames(V) <- gsub("PC","S",colnames(V))
   mV = melt(V,id.vars=c('PrintRow','PrintColumn','ECMp'))
-  p=ggplot(data=mV[variable%in%paste0("PC",1:k),],mapping=aes(x=PrintColumn,y=PrintRow,fill=value))+geom_tile()+scale_fill_gradient2()+facet_wrap(~variable,nrow=nrow)+coord_fixed()
+  p=ggplot(data=mV[variable%in%paste0("S",1:k),],mapping=aes(x=PrintColumn,y=PrintRow,fill=value))+geom_tile()+scale_fill_gradient2()+facet_wrap(~variable,nrow=nrow)+coord_fixed()
   p=p+theme(axis.title.x=element_blank(),
             axis.text.x=element_blank(),
             axis.ticks.x=element_blank())
@@ -129,8 +133,8 @@ asvd_layout = function(asvd,k=5,ttl=NULL,nrow=NULL,scale=TRUE){
   return(p)
 }
 
-bcss = function(SVD){
-    V = data.table(vdf(SVD)$v[,c('PC1','PC2','PrintRow','PrintColumn','ECMp')])
+bcss = function(SVD,fmats){
+    V = data.table(vdf(SVD,fmats)$v[,c('PC1','PC2','PrintRow','PrintColumn','ECMp')])
     W = V[,.(WSS = (PC1-mean(PC1))^2+(PC2-mean(PC2))^2),by=ECMp]
     W = W[,.(WSS=sum(WSS)),by=.(ECMp)]
     T = V[,.(TSS = (PC1-mean(PC1))^2+(PC2-mean(PC2))^2)]

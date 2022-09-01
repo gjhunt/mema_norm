@@ -10,21 +10,33 @@
 #' @param verbose print intermediate results
 #' @param full.results return intermediate results. If FALSE just returns adjusted matrices.
 #' @export
-remove_spatial <- function(f_mats, adj_idx, row_rep, col_rep, d, row_impute = TRUE, 
+remove_spatial <- function(f_mats, adj_idx, row_rep, col_rep, d, row_impute = TRUE,
     row_center = TRUE, verbose = TRUE, full.results = FALSE) {
     # pre-proscessing
-    if (any(sapply(f_mats, class) != "matrix")) 
+    if (any(sapply(f_mats, class) != "matrix"))
         f_mats <- lapply(f_mats, as.matrix)
-    if (row_impute) 
+    if (row_impute)
         f_mats <- lapplyp(f_mats, row_impute_fn, col_rep, verbose = verbose, .name = "Imputing")
-    if (row_center) 
+    if (row_center)
         f_mats <- lapply(f_mats, function(mat) t(scale(t(mat), scale = FALSE, center = TRUE)))
     # replicate design matrices
     L <- stats::model.matrix(~-1 + row_rep)
     Et <- stats::model.matrix(~-1 + col_rep)
+    # deal with systematically missing values
+    f_mats0 = f_mats[adj_idx]
+    not_finite_rows = lapply(f_mats0,function(fm)apply(fm,1,function(x)all(!is.finite(x))))
+    for(i in seq_along(f_mats0)){
+    	f_mats0[[i]][not_finite_rows[[i]],] <- 0
+    }
+    PL0 = lapply(seq_along(f_mats0),function(i){
+    	L_s = L
+    	L_s[not_finite_rows[[i]],] <- 0
+    	P_s = proj_mat(L_s)
+    	return(P_s)
+    	
+    })
     # estimate S
-    PL <- proj_mat(L)
-    f_mats_L <- lapply(f_mats[adj_idx], function(mat) residop(mat, P = PL))
+    f_mats_L <- lapply(seq_along(f_mats0), function(i) residop(f_mats0[[i]], P = PL0[[i]]))
     if (d > 0) {
         asvd <- average_svd_na(f_mats_L, nu = 0, nv = d)
         s_hat <- t(asvd$v)
@@ -39,14 +51,17 @@ remove_spatial <- function(f_mats, adj_idx, row_rep, col_rep, d, row_impute = TR
     rmv <- lapply(w_hats, function(w) w %*% s_hat)
     f_adj <- lapply(seq_along(f_mats), function(i) f_mats[[i]] - rmv[[i]])
     names(f_adj) <- names(f_mats)
-    if (full.results) 
-        return(list(f_adj = f_adj, w_hats = w_hats, s_hat = s_hat))
+    if (full.results)
+        return(list(f_adj = f_adj, w_hats = w_hats, s_hat = s_hat, f_mats = f_mats, f_mats_L = f_mats_L))
     return(list(f_adj = f_adj))
 }
 
+
+
+
 # R(B)%*%A; P = proj_mat(B)
 residop <- function(A, B = NULL, P = NULL) {
-    if (is.null(P)) 
+    if (is.null(P))
         P <- proj_mat(B)
     return(A - P %*% A)
 }

@@ -7,7 +7,7 @@ jupyter:
       extension: .Rmd
       format_name: rmarkdown
       format_version: '1.2'
-      jupytext_version: 1.7.1
+      jupytext_version: 1.11.4
   kernelspec:
     display_name: R
     language: R
@@ -30,21 +30,43 @@ options(warn=-1) # turn off warnings
 and then read in the data
 
 ```{r}
+tg = ""
+```
+
+```{r}
 dm=15
 ddir = './processed_data/'%+%tag%+%"/csv/"
 dir(ddir)
-d = read.csv(ddir%+%tag%+%"_"%+%dm%+%"_df.csv",row.names=1)
+d = read.csv(ddir%+%tag%+%"_"%+%dm%+%"_df"%+%tg%+%".csv",row.names=1)
 d = data.table(d)
 d$PlateWell <- d$Plate%+%"."%+%d$Well
 ```
 
 We also add in the feature "PlateWell" which is the interaction of Plate and Well. The variable `dm` is the number of dimensions of unwanted variation to remove. For this example we set it to 15. In this representation of the data there are 128064 rows (192 wells x 667 spots) and 486 columns (features)
 
+
+We can also plot the design layout
+
 ```{r}
-dim(d)
+seld = d[Barcode == unique(Barcode)[1],]
 ```
 
-The first several features are meta data concerning the spots
+```{r}
+plt = ggplot(data=seld,mapping=aes(y=ArrayRow,x=ArrayColumn,color=ECMp))+
+    geom_point(size=5)
+plt = plt + theme_bw()
+plt = plt + guides(color=FALSE) + coord_fixed()
+plt = plt + labs(x=NULL,y=NULL)
+plt = plt + theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+plt = plt + theme(plot.margin=unit(c(0,0,0,0),"mm")) 
+plt
+ggsave(plot=plt,file="design.png",width=4,height=7.1)
+```
+
+The first several features are meta-data concerning the spots
 ```{r}
 head(colnames(d),n=20)
 ```
@@ -58,40 +80,17 @@ and for each of the measured features there are three versions:
 colnames(d)[c(99,282,398)] # 3 versions of Nuclei Area
 ```
 
-Before we do anything, we're going to center the features in the wells to account for that source of variation. We do this because our normalization approach will account for this and since its easy to account for we want to make sure we are doing a fair comparison with no normalization. we'll also create vectors of the numeric, texture, and non-texture numeric features.
-
 ```{r}
 numeric_cols = colnames(d)[71:ncol(d)-3][-(180:184)]
 numeric_cols = numeric_cols[which(sapply(numeric_cols,function(s)grepl("_RR$|_RR_ADJ$",s)))]
 texture_cols = numeric_cols[grepl("Texture",numeric_cols)]
 non_texture = setdiff(numeric_cols,texture_cols)                                         
-                                         
-d = d[ , (numeric_cols) := lapply(.SD, function(x)x-mean(x,na.rm=TRUE)), .SDcols = numeric_cols,by=.(PlateWell)]
-```
-
-As a gut-check we'll just examine box-plots of cell count for the untouched, RR, and RR + adjustment versions
-
-```{r}
-ft = "Spot_PA_SpotCellCount"
-options(repr.plot.width = 20, repr.plot.height = 10)
-ggplot(data=d,mapping=aes_string(x="PlateWell",y=ft))+geom_boxplot()+
-    stat_summary(fun.y=mean,geom="point",col='red')+
-    theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))
 ```
 
 ```{r}
-ft = "Spot_PA_SpotCellCount_RR"
-options(repr.plot.width = 20, repr.plot.height = 10)
-ggplot(data=d,mapping=aes_string(x="PlateWell",y=ft))+geom_boxplot()+
-    stat_summary(fun.y=mean,geom="point",col='red')+
-    theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))
-```
-
-```{r}
-ft = "Spot_PA_SpotCellCount_RR_ADJ"
-ggplot(data=d,mapping=aes_string(x="PlateWell",y=ft))+geom_boxplot()+
-    stat_summary(fun.y=mean,geom="point",col='red')+
-    theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))
+d_c = as.data.frame(d)
+d_c = data.table(d_c)
+d_c = d_c[ , (numeric_cols) := lapply(.SD, function(x)x-mean(x,na.rm=TRUE)), .SDcols = numeric_cols,by=.(PlateWell)]
 ```
 
 In addition to the format of the .csv file it will be useful to have a list of feature matrices. For each matrix a row is a well and each column a spot.
@@ -113,44 +112,31 @@ head(sample(feature_batch))
 
 For this dataset features are measured in either batches 1, 2, or 3 alone, batches 1 and 3, or all three batches. Note here a missing "feature batch" indicates meta-data.
 
-```{r}
-print(unique(feature_batch))
-```
 
-# Plots
-
-## 1 . Spatial shared across features (same well)
-
-We want to show that the same spatial patterns appear across different features. 
+# Plots in Paper
 
 
-### Example 1.1
+## Fig 2
 
 ```{r}
-source('./plot_scripts/plot_fns.R')
-options(repr.plot.width = 10, repr.plot.height = 5)
-```
+cmb = cbind(fmats[["Plate"]][,1],fmats[["Well"]][,1])
+pws = apply(cmb,1,function(x)paste0(x,collapse="."))
 
-```{r}
+source('plot_scripts/plot_fns.R')
+
+library('viridis')
+
 warn = getOption("warn")
 options(warn=-1)
 
 
 sel_feats = c('Cytoplasm_CP_Intensity_MedianIntensity_Actin_RR',
-                         'Nuclei_CP_Intensity_MedianIntensity_Dapi_RR',
                          'Nuclei_CP_AreaShape_Area_RR',
-                         'Nuclei_PA_AreaShape_Neighbors_RR',
-                         'Spot_PA_SpotCellCount_RR',
-                         'Cytoplasm_CP_Intensity_MedianIntensity_CellMask_RR',
                          'Cytoplasm_CP_Intensity_MedianIntensity_MitoTracker_RR',
                         'Nuclei_PA_Cycle_DNA4NProportion_RR')
-short_names = c("Cyto. Actin Med. Int.",
-               "Nuc. DAPI Med. Int.",
+short_names = c("Cyto. Med. Actin",
                "Nuc. Area",
-               "Neighbors",
-               "Cell Count",
-               "Cyto. CellMask Med. Int.",
-               "Cyto. MitoTracker Med. Int.",
+               "Cyto. Med. MT",
                "Nuc. DNA4 Prop."
               )
 sel_pw = "LI8X00525.A01"
@@ -158,661 +144,279 @@ sel_pw = "LI8X00525.A01"
 wp1=well_plot(feats=sel_feats,
     fnames = short_names,
     pw=sel_pw,
-    facet="~Feature")
+    facet="~Feature",nr=1)+scale_fill_gradient2(limits=c(-4,4),na.value='white')
 
-ws1=well_scatter(feats=sel_feats,
-    fnames = short_names,
-    pw=sel_pw)
-
-wp1
-ws1
-
-options(warn=warn)
-```
-
-### Example 1.2
-
-```{r}
-warn = getOption("warn")
-options(warn=-1)
-
-sel_feats=c('Cytoplasm_CP_Intensity_MedianIntensity_Actin_RR',
-                         'Nuclei_CP_Intensity_MedianIntensity_Dapi_RR',
-                         'Nuclei_CP_AreaShape_Area_RR',
-                         'Nuclei_PA_AreaShape_Neighbors_RR',
-                         'Spot_PA_SpotCellCount_RR',
-                         'Cytoplasm_CP_Intensity_MedianIntensity_CellMask_RR',
-                         'Cytoplasm_CP_Intensity_MedianIntensity_MitoTracker_RR',
-                        'Nuclei_PA_Cycle_DNA4NProportion_RR')
-short_names = c("Cyto. Actin Med. Int.",
-               "Nuc. DAPI Med. Int.",
-               "Nuc. Area",
-               "Neighbors",
-               "Cell Count",
-               "Cyto. CellMask Med. Int.",
-               "Cyto. MitoTracker Med. Int.",
-               "Nuc. DNA4 Prop."
-              )
-sel_pw="LI8X00526.B03"
-
-wp2=well_plot(feats=sel_feats,
+sel_feats = paste0(sel_feats,"_ADJ")
+wpa1=well_plot(feats=sel_feats,
     fnames = short_names,
     pw=sel_pw,
-    facet="~Feature")
+    facet="~Feature",nr=1)+scale_fill_gradient2(limits=c(-4,4),na.value='white')
 
-ws2=well_scatter(feats=sel_feats,
-    fnames = short_names,
-    pw=sel_pw)
-
-wp2
-ws2
-
-options(warn=warn)
-```
-
-### Example 1.3
-
-```{r}
-warn = getOption("warn")
-options(warn=-1)
-
-source('./plot_scripts/plot_fns.R')
-sel_feats=c('Cytoplasm_CP_Intensity_MedianIntensity_Actin_RR',
-                     'Nuclei_CP_Intensity_MedianIntensity_Dapi_RR',
-                     'Nuclei_CP_AreaShape_Area_RR',
-                     'Nuclei_PA_AreaShape_Neighbors_RR',
-                     'Spot_PA_SpotCellCount_RR',
-                     'Cytoplasm_CP_Intensity_MedianIntensity_CellMask_RR',
-                     'Cytoplasm_CP_Intensity_MedianIntensity_MitoTracker_RR',
-                    'Nuclei_PA_Cycle_DNA4NProportion_RR')
-short_names = c("Cyto. Actin Med. Int.",
-           "Nuc. DAPI Med. Int.",
-           "Nuc. Area",
-           "Neighbors",
-           "Cell Count",
-           "Cyto. CellMask Med. Int.",
-           "Cyto. MitoTracker Med. Int.",
-           "Nuc. DNA4 Prop."
-          )
-sel_pw="LI8X00520.B04"
-
-wp3=well_plot(feats=sel_feats,
-fnames = short_names,
-pw=sel_pw,
-facet="~Feature")
-
-ws3=well_scatter(feats=sel_feats,
-fnames = short_names,
-pw=sel_pw)
-
-wp3
-ws3
-
-options(warn=warn)
-```
-
-### Example 1.4
-
-```{r}
-warn = getOption("warn")
-options(warn=-1)
-
-source('./plot_scripts/plot_fns.R')
-sel_feats=c('Nuclei_CP_Intensity_MedianIntensity_KRT19_RR',
-                         'Cytoplasm_PA_Intensity_LineageRatio_RR',
-                         'Cytoplasm_PA_Gated_KRT5PositiveProportion_RR',
-                         'Nuclei_CP_AreaShape_Perimeter_RR',
-                         'Spot_PA_SpotCellCount_RR',
-                         'Cytoplasm_CP_Intensity_MedianIntensity_CellMask_RR',
-                         'Cytoplasm_CP_Intensity_IntegratedIntensity_Dapi_RR',
-                        'Nuclei_PA_Cycle_DNA4NProportion_RR')
-short_names = c("Nuc. KRT19 Med. Int.",
-               "Cyto. Lineage Ratio",
-               "Cyto. KRT5 Pos. Prop.",
-               "Nuc. Perimeter",
-               "Cell Count",
-               "Cyto. CellMask Med. Int.",
-               "Nuc. DAPI Tot. Int.",
-               "Nuc. DNA4 Prop."
-              )
-sel_pw="LI8X00513.A03"
-
-wp4=well_plot(feats=sel_feats,
-fnames = short_names,
-pw=sel_pw,
-facet="~Feature")
-
-ws4=well_scatter(feats=sel_feats,
-fnames = short_names,
-pw=sel_pw)
-
-wp4
-ws4
-
-options(warn=warn)
-```
-
-## 2. Spatial shared across wells (same feature)
-
-We also want to show that the same spatial features shows up across multiple wells (here, the same feature)
-
-```{r}
-cmb = cbind(fmats[["Plate"]][,1],fmats[["Well"]][,1])
-pws = apply(cmb,1,function(x)paste0(x,collapse="."))
-```
-
-### Example 2.1
-
-```{r}
-warn = getOption("warn")
-options(warn=-1)
-
-sel_feats='Nuclei_CP_AreaShape_Area_RR'
-short_names = 'Area'
-sel_pw=c("LI8X00529.B02", "LI8X00531.B02", "LI8X00532.B02", "LI8X00532.B04", "LI8X00534.B04")
-    
-wpw1=well_plot(feats=sel_feats,
-fnames = short_names,
-pw=sel_pw,
-facet="~Well",
-scale_name="Area",nr=1)
-
-wsw1=well_scatter_byw(feats=sel_feats,
-fnames = short_names,
-pw=sel_pw)
-
-wpw1
-wsw1
-
-options(warn=warn)
-```
-
-### Example 2.2
-
-```{r}
-ft = 'Spot_PA_SpotCellCount_RR'
-scc = fmats[[ft]]
-cor_mat = cor(t(scc),use="na.or.complete")
-
-sel_feats = ft
-short_names = "Cell Count"
-
-sel_pw=pws[order(cor_mat[which(pws=='LI8X00525.B01'),],decreasing=TRUE)[c(1,2,4,5)]]
-           
-wpw2=well_plot(feats=sel_feats,
-fnames = short_names,
-pw=sel_pw,
-facet="~Well",
-scale_name=short_names,nr=1)
-
-wsw2=well_scatter_byw(feats=sel_feats,
-fnames = short_names,
-pw=sel_pw)
-
-wpw2
-wsw2
-```
-
-### Example 2.3
-
-```{r}
-warn = getOption("warn")
-options(warn=-1)
 
 ft = 'Nuclei_PA_Cycle_DNA2NProportion_RR'
-scc = fmats[[ft]] #fmat
-
-# find wells that are highly cor with other wells generally
-# we will search among these
-cor_mat = cor(t(scc),use="pairwise.complete.obs")^2 # squared cors btwn wells
-
-sel_feats=ft
-short_names = 'Nuc. DNA2N Prop.'
-sel_pw = pws[order(cor_mat[which(pws=='LI8X00523.B02'),],decreasing=TRUE)[1:4]]
-
-wpw3=well_plot(feats=sel_feats,
-fnames = short_names,
-pw=sel_pw,
-facet="~Well",
-scale_name=short_names,nr=1)
-
-wsw3=well_scatter_byw(feats=sel_feats,
-fnames = short_names,
-pw=sel_pw)            
-
-wpw3
-wsw3        
-
-options(warn=warn)
-```
-
-### Example 2.4
-
-```{r}
-warn = getOption("warn")
-options(warn=-1)
-
 ft = 'Cytoplasm_CP_Intensity_MedianIntensity_MitoTracker_RR'
 scc = fmats[[ft]] #fmat
 
 # find wells that are highly cor with other wells generally
 # we will search among these
 cor_mat = cor(t(scc),use="pairwise.complete.obs")^2 # squared cors btwn wells
-qcors = apply(cor_mat,1,quantile,.9,na.rm=TRUE) 
-oqc = order(qcors,decreasing=TRUE)
-
-#plate.well names
-cmb = cbind(fmats[["Plate"]][,1],fmats[["Well"]][,1]) 
-pws = apply(cmb,1,function(x)paste0(x,collapse="."))
-
-# choose top correlated 
-N=20
-chse = sort(unique(pws[oqc][1:N]))
-chse = chse[c(9,13:14,18)]
 
 sel_feats=ft
-short_names = 'Med. Mito Cyto. Int.'
-sel_pw = chse
+short_names = 'Cyto. Med. MT'
+sel_pw = c("LI8X00523.B02","LI8X00524.B02","LI8X00525.B01","LI8X00525.B02")#pws[order(cor_mat[which(pws=='LI8X00523.B02'),],decreasing=TRUE)[1:4]]
 
-wpw4=well_plot(feats=sel_feats,
+wpw3=well_plot(feats=sel_feats,
 fnames = short_names,
 pw=sel_pw,
 facet="~Well",
-scale_name=short_names,nr=1)
+scale_name=short_names,nr=1)+scale_fill_gradient2(limits=c(-4,4),na.value='white')
 
-wsw4=well_scatter_byw(feats=sel_feats,
-fnames = short_names,
-pw=sel_pw)            
-
-wpw4
-wsw4        
-
-options(warn=warn)
-```
-
-## 3. Adjusted Data Removes Spatial Effects
-
-
-We now want to show what our approach looks like after removing the spatial effects. We recapitulate some previous two plots but now using the adjusted data. 
-
-## Example 3.1 -- adjusted example 2.1
-
-```{r}
-warn = getOption("warn")
-options(warn=-1)
-
-
-sel_feats = c('Cytoplasm_CP_Intensity_MedianIntensity_Actin_RR',
-                         'Nuclei_CP_Intensity_MedianIntensity_Dapi_RR',
-                         'Nuclei_CP_AreaShape_Area_RR',
-                         'Nuclei_PA_AreaShape_Neighbors_RR',
-                         'Spot_PA_SpotCellCount_RR',
-                         'Cytoplasm_CP_Intensity_MedianIntensity_CellMask_RR',
-                         'Cytoplasm_CP_Intensity_MedianIntensity_MitoTracker_RR',
-                        'Nuclei_PA_Cycle_DNA4NProportion_RR')
 sel_feats = paste0(sel_feats,"_ADJ")
-short_names = c("Cyto. Actin Med. Int.",
-               "Nuc. DAPI Med. Int.",
-               "Nuc. Area",
-               "Neighbors",
-               "Cell Count",
-               "Cyto. CellMask Med. Int.",
-               "Cyto. MitoTracker Med. Int.",
-               "Nuc. DNA4 Prop."
-              )
-sel_pw = "LI8X00525.A01"
-
-wp1=well_plot(feats=sel_feats,
-    fnames = short_names,
-    pw=sel_pw,
-    facet="~Feature")
-
-ws1=well_scatter(feats=sel_feats,
-    fnames = short_names,
-    pw=sel_pw)
-
-wp1
-ws1
-
-options(warn=warn)
-```
-
-### Example 4.2 -- adjusted example 3.1
-
-```{r}
-warn = getOption("warn")
-options(warn=-1)
-
-sel_feats='Nuclei_CP_AreaShape_Area_RR_ADJ'
-short_names = 'Area'
-sel_pw=c("LI8X00529.B02", "LI8X00531.B02", "LI8X00532.B02", "LI8X00532.B04", "LI8X00534.B04")
-    
-wpw1=well_plot(feats=sel_feats,
+wpwa3=well_plot(feats=sel_feats,
 fnames = short_names,
 pw=sel_pw,
 facet="~Well",
-scale_name="Area",nr=1)
+scale_name=short_names,nr=1)+scale_fill_gradient2(limits=c(-4,4),na.value='white')
 
-wsw1=well_scatter_byw(feats=sel_feats,
-fnames = short_names,
-pw=sel_pw)
+lbls = c('(A) Spatial Sig. Across Features',
+         '(B) Spatial Sig. Across Wells/Plates',
+         '(A) Spatial Sig. Across Features (Adj.)',
+         '(B) Spatial Sig. Across Wells/Plates (Adj.)'
+        )
 
-wpw1
-wsw1
-
-options(warn=warn)
+out = plot_grid(wp1+theme(legend.position='bottom'),
+                wpw3+theme(legend.position='bottom'),
+                labels=lbls[1:2],nrow=2,
+                hjust=0,vjust=1.1,
+                scale=.925
+               )
+ggsave(plot=out,
+       file=paste0('./',tg,'patterns.pdf'),width=6,height=8)
 ```
 
-in both cases we can see that the spatial effects have disappeared. 
-
-
-## 5. Biology is preserved and enhanced (specific feature)
-
-
-In addition to removing the spatial effects, we need to show that this will not harm the biological signal. First we'll look at median cytoplasmic actin intensity as an example.
-
 ```{r}
-ft = "Cytoplasm_CP_Intensity_MedianIntensity_Actin_RR"
-svd1 = memanorm::average_svd_na(fmats[ft])
-svd1_adj = memanorm::average_svd_na(fmats[ft%+%"_ADJ"])
+out
 ```
 
-First, let's look a bit more at how the spatial effect manifest before/after adjustment. 
-
-
-### Example 5.1 -- PCA Scatter: Spatial Distribution
+## Fig 4
 
 ```{r}
-sctr=asvd_compare(svd1,svd1_adj,fn=asvd_scatter_layout,hl="PrintRow")
-sctr
+out2 = plot_grid(wpa1+theme(legend.position='bottom'),
+                wpwa3+theme(legend.position='bottom'),
+                labels=lbls[3:4],nrow=2,
+                hjust=0,vjust=1.1,
+                scale=.925)
+
+ggsave(plot=out2,
+       file=paste0('./',tg,'patterns_clean.pdf'),width=6,height=8)
 ```
 
-### Example 5.2 -- Spatial Distribution
-
 ```{r}
-options(repr.plot.width = 10, repr.plot.height = 5)
-plot_grid(asvd_layout(svd1,k=5,"Unadjusted"),
-          asvd_layout(svd1_adj,k=5,"Adjusted"),
-          labels=c('(A)','(B)'),nrow=1)
+out2
 ```
 
-Now we can look at how well the ECMps cluster before/after adjustment. First we'll look at all ECMps together.
-
-
-### Example 5.3 -- PCA Scatter: ECMp clustering
+# Supplementary figure 2
 
 ```{r}
-options(repr.plot.width = 10, repr.plot.height = 5)
-sctr=asvd_compare(svd1,svd1_adj,rw_leg=.5)
-sctr
+ft = 'Nuclei_CP_AreaShape_Compactness_RR'
+F = (scale((fmats[[ft]]),center=FALSE,scale=FALSE))
+FA = (scale((fmats[[ft%+%"_ADJ"]]),center=FALSE,scale=FALSE))
+svd1 = memanorm::average_svd_na(list(F))
+svd1_adj = memanorm::average_svd_na(list(FA))
 ```
 
-Now, we can highlight specific ECMps.
-
-
-### Example 5.4 -- PCA Scatter: THBS1|1 Clustering
-
 ```{r}
-source('plot_scripts/plot_fns.R')
-hl="THBS1_1"
-options(repr.plot.width = 12, repr.plot.height = 6)
-sctr=asvd_compare(svd1,svd1_adj,hl=hl)
-sctr
-```
-
-### Example 5.5 -- PCA Scatter: FN1|1 Clustering
-
-```{r}
-source('plot_scripts/plot_fns.R')
-hl="FN1_1"
-options(repr.plot.width = 12, repr.plot.height = 6)
-sctr=asvd_compare(svd1,svd1_adj,hl=hl)
-sctr
-```
-
-### Example 5.6 -- PCA Scatter: FBN1 Clustering
-
-```{r}
-source('plot_scripts/plot_fns.R')
-hl="FBN1"
-options(repr.plot.width = 12, repr.plot.height = 6)
-sctr=asvd_compare(svd1,svd1_adj,hl=hl)
-sctr
-```
-
-### Example 5.7 -- PCA Scatter: CDH15 Clustering
-
-```{r}
-source('plot_scripts/plot_fns.R')
-hl="CDH15"
-options(repr.plot.width = 12, repr.plot.height = 6)
-sctr=asvd_compare(svd1,svd1_adj,hl=hl)
-sctr
-```
-
-### Example 5.8 -- PCA Scatter: COL2A1|2 Clustering
-
-```{r}
-source('plot_scripts/plot_fns.R')
-hl="COL2A1_2"
-options(repr.plot.width = 12, repr.plot.height = 6)
-sctr=asvd_compare(svd1,svd1_adj,hl=hl)
-sctr
-```
-
-### Example 5.9 -- Overall Clustering metric: lower WSS/TSS
-
-
-We can summarize all of this by looking at the within-group sum of squares normalized by the total sum of squares. This gives a measure of how well the ECMp clusters. When we do this we can see that adjusting the data typically gives (much) smaller (normalized) within-group SS and thus the ECMps more tightly cluster. 
-
-```{r}
-source('plot_scripts/plot_fns.R')
-cmp = bcss_compare(svd1,svd1_adj)
-ttl = paste0("WCSS/TSS [",paste0(c("Unadj.","Adj."),": ",round(cmp$bt,5),collapse=", "),"]")
-
-options(repr.plot.width = 11, repr.plot.height = 5)
-ggplot(data=cmp$mbc,mapping=aes(x=ECMp,y=value,color=variable))+geom_point()+
-  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))+
-  labs(y="Within Cluster SS / TSS")+ggtitle(ttl)
-```
-
-## 6. Biology is preserved and enhanced (across multiple features)
-
-
-We can also summarize across many features by looking at the average SVD across features. We're going to consider the "Batch 1 features" -- i.e. features only measured in staining batch 1, 
-
-```{r}
-ss1_rr = grep("_RR$",names(which(feature_batch=="1")),value=TRUE)
-ss1_rr_adj = grep("_RR_ADJ$",names(which(feature_batch=="1")),value=TRUE)
-ss1_rr
-```
-
-Our first set of plots is going to be scatter plots after the data has been projected down onto the first two PCs. First we calculate the Average PCA/SVD (ASVD) for the batch 1 features and again visualize the spatial patterns. 
-```{r}
-ss1_feats_cent = fmats[ss1_rr]#lapply(fmats[ss1_rr],function(x)t(scale(t(x),center=FALSE,scale=FALSE)))
-ss1_adj_feats_cent = fmats[ss1_rr_adj]#lapply(fmats[ss1_rr_adj],function(x)t(scale(t(x),center=FALSE,scale=FALSE)))
-asvd1_rr = memanorm::average_svd_na(ss1_feats_cent)
-asvd1_rr_adj = memanorm::average_svd_na(ss1_adj_feats_cent)
-```
-
-### Example 6.1 -- PCA Scatter: Spatial Distribution
-
-```{r}
-options(repr.plot.width = 10, repr.plot.height = 5)
-sctr=asvd_compare(asvd1_rr,asvd1_rr_adj,fn=asvd_scatter_layout,hl="PrintRow")
-sctr
-```
-
-### Example 6.2 -- Spatial Distribution
-
-```{r}
-options(repr.plot.width = 10, repr.plot.height = 5)
-plot_grid(asvd_layout(asvd1_rr,k=5,"Unadjusted"),
-          asvd_layout(asvd1_rr_adj,k=5,"Adjusted"),
-          labels=c('(A)','(B)'),nrow=1)
-```
-
-### Example 6.3 -- PCA Scatter: ECMp clustering
-
-
-We can now look at how well ECMps cluster. First, we consider all ECMps together. 
-
-```{r}
-source('plot_scripts/plot_fns.R')
-options(repr.plot.width = 10, repr.plot.height = 5)
-sctr=asvd_compare(asvd1_rr,asvd1_rr_adj,rw_leg=.5)
-sctr
-```
-
-### Example 6.4 -- PCA Scatter: THBS1|1 Clustering
-
-
-We'll now highlight specific ECMps
-
-```{r}
-hl="THBS1_1"
-options(repr.plot.width = 10, repr.plot.height = 5)
-sctr=asvd_compare(asvd1_rr,asvd1_rr_adj,hl=hl)
-sctr
-```
-
-### Example 6.5 -- PCA Scatter: FN1|1 Clustering
-
-```{r}
-hl="FN1_1"
-options(repr.plot.width = 10, repr.plot.height = 5)
-sctr=asvd_compare(asvd1_rr,asvd1_rr_adj,hl=hl)
-sctr
-```
-
-### Example 6.6 -- PCA Scatter: FBN1 Clustering
-
-```{r}
-hl="FBN1"
-options(repr.plot.width = 10, repr.plot.height = 5)
-sctr=asvd_compare(asvd1_rr,asvd1_rr_adj,hl=hl)
-sctr
-```
-
-### Example 6.7 -- PCA Scatter: CDH15 Clustering
-
-```{r}
-hl="CDH15"
-options(repr.plot.width = 10, repr.plot.height = 5)
-sctr=asvd_compare(asvd1_rr,asvd1_rr_adj,hl=hl)
-sctr
-```
-
-### Example 6.8 -- PCA Scatter: COL2A1|2 Clustering
-
-```{r}
-hl="COL2A1_2"
-options(repr.plot.width = 10, repr.plot.height = 5)
-sctr=asvd_compare(asvd1_rr,asvd1_rr_adj,hl=hl)
-sctr
-```
-
-### Example 6.9 -- Overall Clustering metric: lower WSS/TSS
-We can summarize all of this by looking at the within-group sum of squares normalized by the total sum of squares. This gives a measure of how well the ECMp clusters. When we do this we can see that adjusting the data typically gives (much) smaller (normalized) within-group SS and thus the ECMps more tightly cluster. 
-
-```{r}
-cmp = bcss_compare(asvd1_rr,asvd1_rr_adj)
-ttl = paste0("WCSS/TSS [",paste0(c("Unadj.","Adj."),": ",round(cmp$bt,5),collapse=", "),"]")
-
-options(repr.plot.width = 11, repr.plot.height = 5)
-ggplot(data=cmp$mbc,mapping=aes(x=ECMp,y=value,color=variable))+geom_point()+
-  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))+
-  labs(y="Within Cluster SS / TSS")+ggtitle(ttl)
-```
-
-## 7. Spatial Effects Learned
-
-### Example 7.1 -- Unwanted Features Learned
-We can directly look at the spatial effects learned (and regressed out) by looking at the PCs for the features measured in all batches. Here, we plot the 15 that are regressed out. 
-
-```{r}
-source('plot_scripts/plot_fns.R')
-ss123_rr = grep("_RR$",names(which(feature_batch=="123")),value=TRUE)
-ss123_feats_cent = lapply(fmats[ss123_rr],function(x)t(scale(t(x),center=TRUE,scale=FALSE)))
-asvd123_rr = memanorm::average_svd_na(ss123_feats_cent)
-options(repr.plot.width = 5, repr.plot.height = 10)                      
-plt1 = asvd_layout(asvd123_rr,k=15)+labs(x=NULL,y=NULL)+theme(axis.title.x=element_blank(),
-              axis.text.x=element_blank(),
-              axis.ticks.x=element_blank())+
-            theme(axis.title.y=element_blank(),
-              axis.text.y=element_blank(),
-              axis.ticks.y=element_blank())
-                          
-plt2 = asvd_layout(asvd123_rr,k=15,scale=FALSE)+labs(x=NULL,y=NULL)+theme(axis.title.x=element_blank(),
-              axis.text.x=element_blank(),
-              axis.ticks.x=element_blank())+
-            theme(axis.title.y=element_blank(),
-              axis.text.y=element_blank(),
-              axis.ticks.y=element_blank())
-                          
-options(repr.plot.width = 10, repr.plot.height = 8.5)
-plot_grid(plt1,plt2,nrow=1,labels=c('(A) Importance Scaled','(B) Unscaled'))                    
-```
-
-### Example 7.2 -- Pct. of Variance Explained by Unwanted Features (example feature)
-
-
-We can also look at an R^2 value for how much each of these spatial features shows up in the data. This gives us a sense of how much the features can be improved by removing the spatial effects. 
-
-```{r}
-ft="Cytoplasm_CP_Intensity_MedianIntensity_Actin_RR"
-cor_with_pc=function(k,fmat)sapply(1:nrow(fmat),function(i)cor(data.frame(V)[,k],unlist(fmat[i,])))
-V = vdf(asvd123_rr,scale=FALSE)$v                         
-cors = sapply(1:dm,function(k)cor_with_pc(k,fmats[[ft]])^2)
-cors = t(apply(cors,1,cumsum))
-cors = data.frame(cors)
-colnames(cors) = paste0('PC',1:dm)
-mcors = melt(cors)
-options(repr.plot.width = 10, repr.plot.height = 5)                      
-ggplot(data=mcors,mapping=aes(x=variable,y=value))+geom_boxplot()+
-              theme_classic()+labs(x="Principal Component",y="Cumulative R2")+
-              theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))+
-              ggtitle(ft)
-```
-
-here we have plotted box-plots of the cumulative squared correlation between each of the wells and the first several PCs that we remove. This shows that the 15 spatial PCs we regress out cumulatively account for somewhere between about 30% to 75% of the variance across the spots in the wells. Here, the median is about 60\%. Said differently, typically about 60% of the variability we see across spots can be attributed to non-ECMp effects.
-
-
-### Example 7.3 -- Pct. of Variance Explained by Unwanted Features (all features)
-
-We can look at similar plots but summarized across all features. Here, we make do a similar calculation as above for all features and then combine across all features. 
-
-```{r}
-ft="Cytoplasm_CP_Intensity_MedianIntensity_Actin_RR"
-cor_with_pc=function(k,fmat)
-    sapply(1:nrow(fmat),function(i)cor(data.frame(V)[,k],unlist(fmat[i,])))
-V = vdf(asvd123_rr,scale=FALSE)$v                        
-f_spatial_cor=function(ft){
-    cors = sapply(1:dm,function(k)cor_with_pc(k,fmats[[ft]])^2)
-    cors = t(apply(cors,1,cumsum))
-    cors = data.frame(cors)
-    colnames(cors) = paste0('PC',1:dm)
-    mcors = melt(cors)
-    mcors = data.table(mcors)
-    #mcors = mcors[,.(cor=median(value,na.rm=TRUE)),by=.(variable)]                  
-    mcors$feat = gsub("_RR$","",ft)                  
-    return(mcors)
+udf = function(svd,hl=NULL){
+    udf = svd$u[,1:3]
+    colnames(udf) = paste0("PC",1:ncol(udf))
+    udf = data.frame(udf)
+    udf$sset = unlist(fmats[['StainingSet']][,1])
+    udf$bc = unlist(fmats[['Barcode']][,1])
+    udf$wl = unlist(fmats[['WellLetter']][,1])
+    udf$lig = unlist(fmats[['Ligand']][,1])
+    #if(!is.null(hl)){
+    #    udf$lig[!(udf$lig%in%hl)] <- "Other"
+    #    udf$lig <- factor(udf$lig,levels=c("Other",hl))
+    #}
+    return(udf)
 }
-                  options(warn=-1)
-apply_to = numeric_cols[grepl("_RR$",numeric_cols)]
-scdfs = lapply(apply_to,f_spatial_cor)
-scdf = Reduce("rbind",scdfs)
 ```
 
 ```{r}
-head(scdf)
+udf1 = udf(svd1)
+udf1_adj = udf(svd1_adj)
 ```
 
 ```{r}
-ggplot(data=scdf,mapping=aes(x=variable,y=value))+geom_boxplot()+
-    labs(x="Principal Component",y="Cumulative R2")+
-    theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))+
-    ggtitle("Pct. of Variance Explained Across all Features")
+p1 = ggplot(data=udf1,mapping=aes(x=PC1,y=PC2,color=sset))+geom_point(size=5)+
+    scale_shape_manual(values=c(16,17,1:14,48:57,65:95))+
+    labs(color='Staining Batch')+
+    ggtitle("Unadjusted")+theme_bw()
 ```
 
-So in this plot each point represents the median (cumul.) correlation (for that feature) between the wells and the PC. 
+```{r}
+p2 = ggplot(data=udf1,mapping=aes(x=PC1,y=PC2,color=wl,shape=wl))+geom_point(size=5)+
+    scale_shape_manual(values=c(16,17,1:14,48:57,65:95))+
+    labs(color='Well Position',shape='Well Position')+
+    ggtitle("Unadjusted")+theme_bw()
+```
+
+```{r}
+p3 = ggplot(data=udf1_adj,mapping=aes(x=PC1,y=PC2,color=sset))+geom_point(size=5)+
+    labs(color='Staining Batch')+
+    ggtitle("Adjusted")+theme_bw()
+```
+
+```{r}
+p4 = ggplot(data=udf1_adj,mapping=aes(x=PC1,y=PC2,color=wl,shape=wl))+geom_point(size=5)+
+    scale_shape_manual(values=c(16,17,1:14,48:57,65:95))+
+    ggtitle("Adjusted")+theme_bw()+
+    labs(color='Well Position',shape='Well Position')
+```
+
+```{r}
+leg1 = get_legend(p1)
+leg2 = get_legend(p2)
+```
+
+```{r}
+p1 = p1 + theme_classic()+guides(color='none',shape='none')
+p2 = p2 + theme_classic()+guides(color='none',shape='none')
+p3 = p3 + theme_classic()+guides(color='none',shape='none')
+p4 = p4 + theme_classic()+guides(color='none',shape='none')
+```
+
+```{r}
+options(repr.plot.width = 12, repr.plot.height = 6)
+pg = plot_grid(p1+guides(color='none'),p3,rel_widths=c(1,1),labels=c('(A)','(B)'))
+```
+
+```{r}
+pg2 = plot_grid(p2+guides(color='none'),p4,rel_widths=c(1,1),labels=c('(C)','(D)'))
+```
+
+```{r}
+plt = plot_grid(pg,leg1,pg2,leg2,rel_widths=c(1,.25,1,.25),nrow=2)
+plt
+```
+
+```{r}
+ggsave(plot=plt,file=paste0(tg,"batch_svd.pdf"),width=12,height=7)
+```
+
+# Figure 5
+
+```{r}
+ft = "Nuclei_PA_Cycle_DNA2NProportion_RR"
+```
+
+```{r}
+F = t(scale(t(fmats[[ft]]),center=TRUE,scale=FALSE))
+FA = t(scale(t(fmats[[ft%+%"_ADJ"]]),center=TRUE,scale=FALSE))
+```
+
+```{r}
+svd1 = memanorm::average_svd_na(list(F))
+svd1_adj = memanorm::average_svd_na(list(FA))
+```
+
+```{r}
+source('plot_scripts/plot_fns.R')
+hl="THBS1_1"
+options(repr.plot.width = 12, repr.plot.height = 5)
+sctr_thbs1=asvd_compare(svd1,svd1_adj,hl=hl,fmats=fmats)
+```
+
+```{r}
+sctr_row=asvd_compare(svd1,svd1_adj,fn=asvd_scatter_layout,hl="PrintRow",fmats=fmats)
+```
+
+```{r}
+ecmp_sctr = asvd_scatter(svd1,fmats=fmats,k=2)[[1]]
+ecmp_sctr_adj = asvd_scatter(svd1_adj,fmats=fmats,k=2)[[1]]
+```
+
+```{r}
+scatter1 = plot_grid(sctr_thbs1,sctr_row,labels=c('(A)','(B)'))
+scatter1
+```
+
+```{r}
+ggsave(plot=scatter1, filename=paste0(tg,"compact_scatter.pdf"),width=10,height=5)
+```
+
+## Figure 6
+
+```{r}
+ss_cca = function(ft,K=1){
+    cat(ft,"\n")
+    flush.console()
+    F = t(scale(t(fmats[[ft]]),center=TRUE,scale=FALSE))
+    FA = t(scale(t(fmats[[ft%+%"_ADJ"]]),center=TRUE,scale=FALSE))
+    svd1 = memanorm::average_svd_na(list(F))
+    svd1_adj = memanorm::average_svd_na(list(FA))
+    B = model.matrix(~-1+unlist(fmats$ECMp[1,]))
+    cca1 = mean(cancor(svd1$v[,1:K],B)$cor^2)
+    cca1_adj = mean(cancor(svd1_adj$v[,1:K],B)$cor^2)
+    return(list(cca1=cca1,cca1_adj=cca1_adj,diff=cca1_adj-cca1))
+}
+```
+
+```{r}
+fts=sapply(numeric_cols,function(s)gsub("_ADJ","",s))
+ss_ccas = lapply(fts,ss_cca)
+```
+
+```{r}
+options(repr.plot.width = 12, repr.plot.height = 6)
+kp_ccas = ss_ccas[!duplicated(fts)]
+cca_df = data.frame(diff = sapply(kp_ccas,"[[","diff"),
+                   unadj=sapply(kp_ccas,"[[","cca1"),
+                   adj=sapply(kp_ccas,"[[","cca1_adj"))
+cca_df$feature <- names(kp_ccas)
+cca_df$feature = gsub("_RR|_CP|_PA","",cca_df$feature)
+cca_df$feature = gsub("_AreaShape|_Texture|_Gated|IntegratedIntensity_","",cca_df$feature)
+cca_df$feature = gsub("Intensity_","",cca_df$feature)
+cca_df$feature = gsub("Cytoplasm","Cyto",cca_df$feature)
+cca_df$feature = gsub("Nuclei","Nuc",cca_df$feature)
+cca_df$feature = gsub("Positive","Pos",cca_df$feature)
+cca_df$feature = gsub("Proportion","Prop",cca_df$feature)
+cca_df$feature = gsub("Negative","Neg",cca_df$feature)
+cca_df$feature = gsub("Luminal","Lum",cca_df$feature)
+cca_df$feature = gsub("Angular","Ang",cca_df$feature)
+cca_df$feature = gsub("Second","Sec",cca_df$feature)
+cca_df$feature = gsub("Basal","Bas",cca_df$feature)
+cca_df$feature = gsub("Difference","Diff",cca_df$feature)
+cca_df$feature = gsub("Moment","Mom",cca_df$feature)
+cca_df$feature = gsub("Inverse","Inv",cca_df$feature)
+cca_df$feature = gsub("Fibrillarin","Fib",cca_df$feature)
+cca_df$feature = gsub("Variance","Var",cca_df$feature)
+cca_df$feature = gsub("Correlation","Cor",cca_df$feature)
+cca_df$feature = gsub("Entropy","Ent",cca_df$feature)
+cca_df$feature = gsub("Median","Med",cca_df$feature)
+cca_df$feature = gsub("Average","Avg",cca_df$feature)
+cca_df$feature <- factor(cca_df$feature,levels=cca_df$feature[order(cca_df$diff,decreasing=FALSE)])
+
+mcca = melt(cca_df)
+mcca = mcca[mcca$variable%in%c('adj','unadj'),]
+colnames(mcca)[2] <- "Adjustment"
+levels(mcca$Adjustment) <- c('','Unadjusted','Adjusted')
+plt = ggplot(data=mcca,mapping=aes(y=value,x=feature,color=Adjustment))+geom_point()
+plt = plt + theme_bw()
+plt = plt+theme(plot.margin = unit(c(.1,.1,.1,.1), "cm"),
+               axis.text.x = element_text(angle = 90, vjust = 1, hjust=1,size=8))+
+    labs(y="Squared Cannonical Correlation\n between ECMp and PC1",x="Feature")
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+plt = plt + scale_colour_manual(values=cbPalette)+theme(legend.position='bottom')
+ggsave(plot=plt,file="cca.pdf",width=10,height=5)
+```
+
+```{r}
+plt
+```
+
+```{r}
+ggsave(plot=plt, filename=paste0(tg,"cca.pdf"),width=10,height=5)
+```
+
+## 

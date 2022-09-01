@@ -12,7 +12,7 @@ average_svd_na <- function(Y_list, nu = NULL, nv = NULL) {
         left_avg_spsd <- spsd_project(left_avg)
         eU <- eigen(left_avg_spsd, symmetric = TRUE)
     }
-    
+
     eV <- NULL
     if (is.null(nv) || nv > 0) {
         right_list <- lapply(Y_list, gram, "right", project = FALSE)
@@ -20,15 +20,15 @@ average_svd_na <- function(Y_list, nu = NULL, nv = NULL) {
         right_avg_spsd <- spsd_project(right_avg)
         eV <- eigen(right_avg_spsd, symmetric = TRUE)
     }
-    
-    if (is.null(c(nu, nv))) 
+
+    if (is.null(c(nu, nv)))
         nu <- nv <- min(dim(Y_list[[1]]))
-    if (is.null(nu)) 
+    if (is.null(nu))
         nu <- sum(eU$values > 0)
-    if (is.null(nv)) 
+    if (is.null(nv))
         nv <- sum(eV$values > 0)
-    
-    return(list(u = eU$vectors[, 1:nu], du = eU$values[1:nu], v = eV$vectors[, 1:nv], 
+
+    return(list(u = eU$vectors[, 1:nu], du = eU$values[1:nu], v = eV$vectors[, 1:nv],
         dv = eV$values[1:nv], missing = NULL))
 }
 
@@ -48,29 +48,29 @@ svdc <- function(X, nu = NULL, nv = NULL) {
     X <- as.matrix(X)
     eU <- eigen(gram(X, chir = "left", na = 0), symmetric = TRUE)
     eV <- eigen(gram(X, chir = "right", na = 0), symmetric = TRUE)
-    eU$vectors <- eU$vectors[, c(sort(which(eU$values > 0)), sort(which(eU$values < 
+    eU$vectors <- eU$vectors[, c(sort(which(eU$values > 0)), sort(which(eU$values <
         0)), sort(which(eU$values == 0)))]
     eU$values <- sapply(eU$values, max, 0)
-    eV$vectors <- eV$vectors[, c(sort(which(eV$values > 0)), sort(which(eV$values < 
+    eV$vectors <- eV$vectors[, c(sort(which(eV$values > 0)), sort(which(eV$values <
         0)), sort(which(eV$values == 0)))]
     eV$values <- sapply(eV$values, max, 0)
-    if (is.null(c(nu, nv))) 
+    if (is.null(c(nu, nv)))
         nu <- nv <- min(dim(X))
-    if (is.null(nu)) 
+    if (is.null(nu))
         nu <- sum(eU$values > 0)
-    if (is.null(nv)) 
+    if (is.null(nv))
         nv <- sum(eV$values > 0)
-    return(list(u = eU$vectors[, 1:nu], du = eU$values[1:nu], v = eV$vectors[, 1:nv], 
+    return(list(u = eU$vectors[, 1:nu], du = eU$values[1:nu], v = eV$vectors[, 1:nv],
         dv = eV$values[1:nv], missing = which(is.na(X))))
 }
 
 gram <- function(A, chir = "left", na = NA, project = TRUE) {
-    if (chir == "right") 
+    if (chir == "right")
         A <- t(A)
     gram <- A %:% t(A)
     gram_zero <- gram
     gram_zero[is.na(gram_zero)] <- 0
-    if (project) 
+    if (project)
         gram_zero <- spsd_project(gram_zero)
     gram_zero[is.na(gram)] <- na
     return(gram_zero)

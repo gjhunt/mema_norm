@@ -1,6 +1,6 @@
 Package: memanorm
 Title: Remove spatial effects from MEMA data
-Version: 0.0.0.9004
+Version: 0.0.0.9005
 Authors@R: 
     c(person(given = "Gregory",
            family = "Hunt",
