@@ -1,4 +1,14 @@
+<img src="cover.png" width="80%">
+
 # Normalization of MEMAs
+
+Leveraging design principles to normalize high-throughput plate-based imaging data like MEMAs.   
+  
+Our manuscript describing the method is available at Bioinformatics [here](..)
+
+A docker image reproducing our analysis is available [here](https://hub.docker.com/r/gjhunt/mema_norm)
+
+This github also contains our analysis files and R packages. The data is too large to host on github so one should alternatively see our docker image on dockerhub [here](https://hub.docker.com/r/gjhunt/mema_norm) or docker image/full files on zenodo [here](..).
 
 ### Analysis files
 
@@ -14,4 +24,4 @@ This takes processed data and prodcues plots. This needs ``MCF10A_15_df.csv`` to
 
 ### R packages
 
-The underlying R package code may be found in the ``r_packages`` folder
+The underlying R package code for both the `rr` package and `memanorm` package may be found in the ``r_packages`` folder.
