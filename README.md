@@ -4,7 +4,7 @@
 
 Leveraging design principles to normalize high-throughput plate-based imaging data like MEMAs.   
   
-Our manuscript describing the method is available at Bioinformatics [here](..)
+Our manuscript describing the method is available at Bioinformatics [here](https://doi.org/10.1093/bioinformatics/btac606)
 
 A docker image reproducing our analysis is available [here](https://hub.docker.com/r/gjhunt/mema_norm)
 
